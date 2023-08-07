@@ -1,0 +1,742 @@
+%matplotlib notebook
+import matplotlib.pyplot as plt
+from matplotlib import animation
+from IPython.display import HTML
+import numpy as np
+from numpy.linalg import norm
+import math as m
+
+def force(pos1, pos2, m1, m2):
+    """
+    Returns the gravitational force exerted by object 2 on object 1.
+    Input:
+      - pos1 = position vector of first object  (NumPy array)
+      - pos2 = position vector of second object (NumPy array)
+      - m1   = mass of first object
+      - m2   = mass of second object
+    Depends on:
+      - G    = gravitational constant (global variable)
+    """
+    r = np.array(pos2) - np.array(pos1) # find the dstance between the points in the x and y axis
+    F = G * m1 * m2 * r / np.linalg.norm(r) ** 3 # Calculate force on objects
+    return F
+
+################################################
+#                                              #
+# Test force is correct in a few simple cases. #
+#                                              #
+#   DO NOT CHANGE THE CODE IN THIS CELL.       #
+#                                              #
+################################################
+
+def test_force(pos1, pos2, m1, m2, expected_force):
+    """Check whether force function gives expected results."""
+    epsilon = 1e-10
+    f = force(np.array(pos1), np.array(pos2), m1, m2)
+    if not isinstance(f,np.ndarray):
+        print(f"ERROR: function should return a vector but returns {f}.")
+        return
+    args_as_string = f"({pos1}, {pos2}, {m1}, {m2})"
+    error = norm(f-expected_force)
+    if error<epsilon:
+        print(f"OK: correct results for input {args_as_string}")
+    else:
+        print(f"ERROR: wrong results for input {args_as_string}")
+        print(f"  expected: {expected_force}")
+        print(f"  got:      {f}")
+
+# Set global variable G to 1 for now to make testing easier
+G=1
+
+# Test force with some simple cases
+test_force((0,0),(1,0),1,1,(1,0))    # distance = 1 in x direction
+test_force((1,0),(0,0),1,1,(-1,0))   # swap objects
+test_force((0,0),(2,0),1,1,(0.25,0)) # distance = 2
+test_force((0,0),(0,1),1,1,(0,1))    # distance = 1 in y direction
+test_force((10,0),(10,1),1,1,(0,1))  # displaced from origin
+test_force((0,0),(1,0),2,1,(2,0))    # non-unit mass 1
+test_force((0,0),(1,0),1,2,(2,0))    # non-unit mass 2
+
+def move_planet(position, velocity, m_star, dt):
+    """
+    Calculate motion of planet in the gravitational field of a star with given mass
+    at the origin, using Euler's method.
+    
+    Input:
+      - position: position vector of planet at start of time step (NumPy array)
+      - velocity: velocity vector of planet at start of time step (NumPy array)
+      - m_star:   mass of star
+      - dt:       time step
+      
+    Output: 
+      - position_new: position vector of planet at end of time step (NumPy array)
+      - velocity_new: velocity vector of planet at end of time step (NumPy array)
+      
+    Depends on:
+      - force = function to calculate the gravitational force between two objects
+    """
+    p = np.array(position)
+    v = np.array(velocity)
+    a = force(p, np.array([0,0]),1, m_star) # Third variable is 1, as assigning 1 to mass of object basically eliminates the mass in gravitational force equation , so effectively giving its acceleration  
+    position_new = p + v * dt # For a mass weighing 1kg, the gravtitational force it feels and acceleration is the same 
+    velocity_new = v + a * dt  
+    return position_new, velocity_new          
+
+# code adpated from 'Task 9.2_Simulating a projectile with air resistance' by 22006797 [1]
+
+######################################################
+#                                                    #
+# Test move_planet is correct in a few simple cases. #
+#                                                    #
+#   DO NOT CHANGE THE CODE IN THIS CELL.             #
+#                                                    #
+######################################################
+
+def test_move_planet(position, velocity, m_star, dt, expected_pos, expected_vel):
+    """Check whether move_planet function gives expected results."""
+    epsilon = 1e-10
+    results = move_planet(np.array(position), np.array(velocity), m_star, dt)
+    if not isinstance(results, tuple):
+        print(f"ERROR: function should return two vectors but returns {results}.")
+        return
+    if not len(results)==2:
+        print(f"ERROR: function should return two vectors but returns {results}.")
+        return
+    pos, vel = results
+    if not (isinstance(pos,np.ndarray) and isinstance(vel,np.ndarray)):
+        print(f"ERROR: function should return two vectors but returns {results}.")
+        return
+    args_as_string = f"{position}, {velocity}, {m_star}, {dt}"
+    err_pos, err_vel = norm(pos - expected_pos), norm(vel - expected_vel)
+    if err_pos < epsilon and err_vel < epsilon:
+        print(f"OK: correct results for input {args_as_string}")
+    else:
+        print(f"ERROR: wrong results for input {args_as_string}")
+        print(f"  expected: {expected_pos, expected_vel}")
+        print(f"  got:      {results}")
+
+# Set global variable G to 1 for now to make testing easier
+G=1
+
+# Test move_planet with some simple cases
+test_move_planet((1,0), (1,0), 1, 0, (1,0), (1,0))    # dt = 0: output = input
+test_move_planet((1,0), (1,0), 1, 1, (2,0), (0,0))    # moving away from star
+test_move_planet((0,1), (0,-1), 1, 1, (0,0), (0,-2))  # moving towards star
+test_move_planet((1,0), (0,1), 1, 1, (1,1), (-1,1))   # moving past star
+test_move_planet((1,0), (0,1), 1, 0.1, (1,0.1), (-0.1,1))  # smaller dt
+test_move_planet((1,0), (0,1), 2, 0.1, (1,0.1), (-0.2,1))  # larger star mass
+test_move_planet((2,0), (1,0), 1, 1, (3,0), (0.75,0)) # non-unit distance
+
+def trajectory(position, velocity, m_star, dt, t_max):
+    """
+    Calculate trajectory of planet from given starting position, using Euler's method.
+    
+    Input:
+      - position: position vector of planet at start of simulation [m] (NumPy array)
+      - velocity: velocity vector of planet at start of simulation [m] (NumPy array)
+      - m_star:   mass of star [kg]
+      - dt:       time step    [s]
+      - t_max:    duration of calculated motion [s]
+
+    Output: (x_arr, y_arr) [m]
+        where x_arr and y_arr are NumPy arrays containing the x and y coordinates of
+        the planet at each time step, starting with the initial position
+    """   
+    #Use eulers method to estimate a trajectory 
+    
+    steps = m.ceil(t_max/dt)
+    t = 0
+    x, y = position
+    x_arr, y_arr = [x], [y]
+    while t <= t_max:
+        t += dt
+        position, velocity = move_planet(position, velocity, m_star, dt)
+        x, y = position
+        x_arr.append(x)
+        y_arr.append(y)
+    return x_arr, y_arr
+
+G       = 6.6743e-11 # gravitational constant [m^3 kg^-1 s^-2]
+YEAR    = 3.154e7    # one year in seconds
+M_STAR  = 2.5e30     # mass of star [kg]
+
+dt = YEAR/10000      # time step for Euler's method
+pos = np.array([2.0e11, 0])    # initial position (x,y) [m]
+vel = np.array([0,2.89e4])     # initial velocity (vx,vy) [m/s]
+
+# Calculate trajectory
+x_test, y_test = trajectory(pos,vel,M_STAR,dt,2*YEAR)
+
+# Plot trajectory
+fig, axes = plt.subplots()
+axes.set_aspect('equal')
+plt.title('Trajectory of planet')
+plt.xlabel('x [m]')
+plt.ylabel('y [m]')
+plt.plot(x_test, y_test)
+
+def animate_with_trail(i, planet, trail, x_arr, y_arr):
+    """
+    Update display for projectile motion, with trail.
+    
+    Arguments:
+        i:      frame number (from 0 at time = 0)
+        planet: Line2D object containing coordinates of planet
+        trail:  Line2D object containing coordinates of trail
+        x_arr:  array of x coordinate at teach time step
+        y_arr:  array of y coordinate at teach time step
+
+    Result: updates coordinates in Line2D objects provided as arguments
+    "bodies" and "trails".
+    """
+    x, y = x_arr[i], y_arr[i]
+    planet.set_data([x],[y])                # Body gets coordinates of current position
+    trail.set_data(x_arr[:i+1],y_arr[:i+1]) # Trail has all points up to the current one
+
+def create_animation(x_arr, y_arr, dt, fps, speedup):
+    """
+    Create an animation of an object with given trajectory.
+    
+    Arguments:
+        x_arr, y_arr: arrays of x and y coordinates at each time step [m]
+        dt:           time step in simulation [s]
+        fps:          number of frames per second for animation
+        speedup:      ratio of simulated time to screen time
+    """
+    # Find range of coordinates to include full trajectory
+    x_max = max(np.abs(x_arr))
+    y_max = max(np.abs(y_arr))
+    r_max = 1.05 * max(x_max, y_max)
+    
+    # Create and configure figure and axes
+    plt.ioff()
+    fig, axes = plt.subplots()
+    axes.set_xlim(-r_max,r_max)
+    axes.set_ylim(-r_max,r_max)
+    axes.set_aspect('equal')
+    axes.set_title('Trajectory of planet')
+    axes.set_xlabel('x [m]')
+    axes.set_ylabel('y [m]')
+
+    # Create Line2D objects to represent body and trail
+    planet,  = axes.plot([],[],'o')
+    trail,   = axes.plot([],[],'-')
+
+    # Get arrays of coordinates to display (subset of provided data)
+    frame_interval = 1/fps                  # time between frames [s]
+    skip = round(frame_interval*speedup*dt) # number of calculated points per frame
+    if skip==0:
+        raise Exception("Speedup factor too low.")
+    x_plot = x_arr[::skip]  # take every Nth value (N = skip)
+    y_plot = y_arr[::skip]
+    n_frames = len(x_plot)
+
+    # Create and return animation object
+    ani = animation.FuncAnimation(fig,animate_with_trail, frames=n_frames, interval=frame_interval*1000,
+                                  fargs=[planet, trail, x_plot, y_plot])
+    return ani
+
+x_values, y_values = trajectory(pos,vel,M_STAR,dt,2*YEAR)     #Use trajectory function to get values 
+ani = create_animation(x_values, y_values, 1, 30, 3.154e3 )
+HTML(ani.to_jshtml())
+
+x_values, y_values = trajectory(pos,vel,M_STAR,dt * 2,2*YEAR) # Increase time step 
+ani = create_animation(x_values, y_values, 1, 30, 3.154e3 ) 
+HTML(ani.to_jshtml())
+
+x_values, y_values = trajectory(pos,vel,M_STAR,dt * 0.5,2*YEAR) # Decrease time step
+ani = create_animation(x_values, y_values, 1, 30, 3.154e3 ) 
+HTML(ani.to_jshtml())
+
+x_values, y_values = trajectory(pos,vel,M_STAR * 2,dt,2*YEAR) # Increase mass
+ani = create_animation(x_values, y_values,  1, 30, 3.154e3 ) 
+HTML(ani.to_jshtml())
+
+x_values, y_values = trajectory(pos,vel,M_STAR * 0.5, dt, 2*YEAR) # Decrease mass
+ani = create_animation(x_values, y_values,  1, 30, 3.154e3) 
+HTML(ani.to_jshtml())
+
+x_values, y_values = trajectory(pos * 1.4,vel,M_STAR,dt,2*YEAR) #Increase distance from origin
+ani = create_animation(x_values, y_values,  1, 30, 3.154e3) 
+HTML(ani.to_jshtml())
+
+x_values, y_values = trajectory(pos * 0.2,vel,M_STAR,dt,2*YEAR) #Decrease distance from origin
+ani = create_animation(x_values, y_values,  1, 30, 3.154e3) 
+HTML(ani.to_jshtml())
+
+x_values, y_values = trajectory(pos,vel*2,M_STAR,dt,2*YEAR) #Increase velocity 
+ani = create_animation(x_values, y_values,  1, 30, 3.154e3) 
+HTML(ani.to_jshtml())
+
+x_values, y_values = trajectory(pos,vel*0.5,M_STAR,dt,2*YEAR) #Decrease velocity
+ani = create_animation(x_values, y_values, 1, 30, 3.154e3) 
+HTML(ani.to_jshtml())
+
+# We need to change our animate function so that it can handle two or more planets 
+
+def animate_multiple(i, planets, trails, trajectories):
+    """
+    Update display for motion of multiple bodies with trails.
+    
+    Arguments:
+        i:       frame number (from 0 at time = 0)
+        planets: list of Line2D objects containing coordinates of each body to move
+        trails:  list of Line2D objects containing coordinates of trails
+        trajectories: list of trajectories, each of the form [x_arr, y_arr]
+                 where x_arr and y_arr are arrays of x and y coordinates at
+                 each time step
+    
+    Note that all trajectories must have the same number of points.
+    """
+    for j in range(len(trajectories)):    # for each trajectory ...
+        trajectory = trajectories[j]
+        x_arr, y_arr = trajectory         # get arrays of x and y coordinats
+        x, y = x_arr[i], y_arr[i]
+        planets[j].set_data([x],[y])
+        trails[j].set_data(x_arr[:i+1],y_arr[:i+1]) # Trail has all points up to this one
+#Code copied from 'FinalAssignmentSupplementaryNotebook' by 'Ben Waugh' [2]
+
+#Then we want a function that will create the trials for the lines and make them different colours         
+
+def get_bodies_and_trails(axes, n):
+    """
+    Get the required number of Line2D objects to represent the bodies
+    being animated, and the trails left behind them.
+    
+    Arguments:
+        axes: the axes to be used for plotting the bodies
+        n:    number of bodies in simulation
+    
+    Returns: (bodies, trails) where
+        bodies is a list of Line2D objects to be plotted as discs
+        trails is a list of Line2D objects to be plotted as lines
+    """
+    bodies = []
+    trails = []
+    for i in range(n):              # repeat n times
+        body,  = axes.plot([],[],'o')           # Line2D with disc markers
+        col    = body.get_color()               # get colour of body ...
+        trail, = axes.plot([],[],'-',color=col) # and set trail (line) to same colour
+        bodies.append(body)         # add Line2D objects to lists
+        trails.append(trail)
+    return bodies, trails
+#Code copied from 'FinalAssignmentSupplementaryNotebook' by 'Ben Waugh' [3]
+
+#We want to also adapt our function that creates the animation such that it can make multiple of them
+
+def create_animation_planets(trajectories, dt, fps, speedup):
+    """
+    Create an animation of objects with given trajectories.
+    
+    Arguments:
+        trajectories: list of trajectories, each of the form [x_arr, y_arr]
+                 where x_arr and y_arr are arrays of x and y coordinates at
+                 each time step
+        dt:           time step in simulation [s]
+        fps:          number of frames per second for animation
+        speedup:      ratio of simulated time to screen time
+    """
+    # Find range of coordinates to include full trajectories 
+    r_max = 1.05 * np.max(np.abs(trajectories))
+
+    # Create and configure figure and axes
+    plt.ioff()
+    fig, axes = plt.subplots()
+    axes.set_xlim(-r_max,r_max)
+    axes.set_ylim(-r_max,r_max)
+    axes.set_aspect('equal')
+
+    # Create Line2D objects to represent bodies and trails
+    bodies, trails = get_bodies_and_trails(axes, 2)
+    body = bodies[0]
+    trail = trails[0]
+
+    # Get arrays of coordinates to display (subset of provided data)
+    frame_interval = 1/fps                  # time between frames [s]
+    skip = round(frame_interval*speedup/dt) # number of calculated points per frame
+    plot_trajectories = []
+    for trajectory in trajectories:
+        x_arr, y_arr = trajectory
+        x_plot = x_arr[::skip]  # take every Nth value (N = skip)
+        y_plot = y_arr[::skip]
+        plot_trajectory = [x_plot, y_plot]
+        plot_trajectories.append(plot_trajectory)
+        n_frames = len(x_plot)
+    
+    # Create and return animation object
+    ani = animation.FuncAnimation(fig,animate_multiple, frames=n_frames, interval=frame_interval*1000,
+                                  fargs=[bodies, trails, plot_trajectories])
+    return ani
+#Code copied from 'FinalAssignmentSupplementaryNotebook' by 'Ben Waugh' [4]
+
+# Constants and parameters
+G       = 6.6743e-11 # gravitational constant [m^3 kg^-1 s^-2]
+YEAR    = 3.154e7    # one year in seconds
+M_STAR  = 2.5e30     # mass of star [kg]
+dt = YEAR/10000      # time step for Euler's method
+
+# Initial position (x,y) [m] and velocity (vx,vy) [m/s] of each planet
+pos_a = np.array([2e11, 0])
+vel_a = np.array([0,2.89e4])
+pos_b = np.array([1.56e11,1.56e11])
+vel_b = np.array([-1.95e4,1.95e4])
+
+# Calculate trajectories (lists of x and y coordinates) [m]
+x_a, y_a = trajectory(pos_a,vel_a,M_STAR,dt,2*YEAR)
+x_b, y_b = trajectory(pos_b,vel_b,M_STAR,dt,2*YEAR)
+
+# Put the results into a list of trajectories, with each trajectory being
+# a list containing the lists of x and y coordinates.
+traj_a = [x_a, y_a]
+traj_b = [x_b, y_b]
+trajectories = [traj_a, traj_b]
+
+# One year is represented by 2 seconds in the animation
+speedup = YEAR/2
+
+# Create and display the animation
+ani = create_animation_planets(trajectories, dt, 50, speedup)
+HTML(ani.to_jshtml())
+
+# Create a new function for planets interacting, with many more inputs and outputs
+
+def move_planets_interacting(posa, vela, posb, velb, m_star, ma, mb, dt):
+    """
+    Calculate motion of planet in the gravitational field of a star with given mass
+    at the origin and planet B with a given mass, using Euler's method.
+    
+    Input:
+      - posa: position vector of planet A at start of time step (NumPy array)
+      - posb: position vector of planet B at start of time step (NumPy array)
+      - vela: velocity vector of planet A at start of time step (NumPy array)
+      - velb: velocity vector of planet B at start of time step (NumPy array)
+      - ma: mass of planet A
+      - mb: mass of planet B
+      - m_star:   mass of star
+      - dt:       time step
+      
+    Output: (position_new, velocity_new)
+      - position_new: position vector of planet at end of time step (NumPy array)
+      - velocity_new: velocity vector of planet at end of time step (NumPy array)
+      
+    Depends on:
+      - force = function to calculate the gravitational force between two objects
+    """
+    
+    # Calculate forces on planets from star and other planet
+    
+    f_b_on_a = force(posa, posb, ma, mb)
+    f_a_on_b = force(posb, posa, mb, ma)
+    f_star_on_a = force(posa, (0,0), ma, m_star)
+    f_star_on_b = force(posb, (0,0), mb, m_star)
+    
+    # Turn the position inputs into arrays
+    
+    vela = np.array(vela)
+    velb = np.array(velb)
+    posa = np.array(posa)
+    posb = np.array(posb)
+    
+    # Find final positions and velocities by adding accelerations and using d = s*t and v = u + at
+
+    vel_new_a = vela + dt*(f_star_on_a/ma) + dt*(f_b_on_a/ma)
+    vel_new_b = velb + dt*(f_star_on_b/mb) + dt*(f_a_on_b/mb)
+    dis_new_a = posa + vela*dt
+    dis_new_b = posb + velb*dt
+    
+    # Return the new distance and velocity vectors of the planets
+    
+    return dis_new_a, vel_new_a, dis_new_b, vel_new_b
+
+# Define new function for the trajectory of the planets 
+
+def trajectory_planets_interacting(posa, vela, posb, velb, m_star, ma, mb, dt, t_max):
+    """
+    Calculate trajectory of planet from given starting position, using Euler's method.
+    
+    Input:
+      - posa: position vector of planet A at start of time step (NumPy array)
+      - posb: position vector of planet B at start of time step (NumPy array)
+      - vela: velocity vector of planet A at start of time step (NumPy array)
+      - velb: velocity vector of planet B at start of time step (NumPy array)
+      - ma: mass of planet A
+      - mb: mass of planet B
+      - m_star:   mass of star
+      - dt:       time step
+      - t_max: maximum time 
+     
+    Output: (x_arr, y_arr) [m]
+        where x_arr and y_arr are NumPy arrays containing the x and y coordinates of
+        the planet at each time step, starting with the initial position
+    """
+    # Define the arrays for planet a and b
+    
+    x,y = posa
+    x1_arr, y1_arr = [x] , [y]
+    x2,y2 = posb
+    x2_arr, y2_arr = [x2] , [y2]
+    
+    # Set intitial time 
+    
+    time = 0
+    steps = m.ceil(t_max/dt)
+    
+    posa_new,vela_new,posb_new,velb_new = move_planets_interacting(posa,vela,posb,velb,m_star,ma,mb,dt)
+    
+    # Input variables into previous function 
+    
+    while time < t_max:
+    
+        posa_new,vela_new,posb_new,velb_new = move_planets_interacting(posa_new,vela_new,posb_new,velb_new,m_star,ma,mb,dt) # Input variables into previous function 
+        x1, y1 = posa_new # Take out 
+        x2, y2 = posb_new # outputs
+        
+        # Below will create an array for the positions of the planets
+        x1_arr.append(x1) 
+        y1_arr.append(y1)
+        x2_arr.append(x2)
+        y2_arr.append(y2)
+        time += dt
+        
+    return x1_arr,y1_arr,x2_arr,y2_arr
+
+# Mass of the planets 
+
+ma = 6e24
+mb = ma
+
+# Set initial parameteres
+
+posa = np.array([2e11, 0])
+vela = np.array([0,2.89e4])
+posb = np.array([1.56e11,1.56e11])
+velb = np.array([-1.95e4,1.95e4])
+
+# Calculate trajectories
+
+xa, ya, xb, yb = trajectory_planets_interacting(posa, vela, posb, velb, M_STAR, ma, mb, dt, 2*YEAR)
+
+# Assign a variable to the arrays of positions for each planet
+
+traja = [xa, ya]
+trajb = [xb, yb]
+trajectories = [traja, trajb]
+
+# One year is represented by 2 seconds in the animation
+
+speedup = YEAR/2
+
+# Form and show the animation
+ani = create_animation_planets(trajectories, dt, 50, speedup)
+HTML(ani.to_jshtml())
+
+# Mass of the planets 
+
+ma = 6e24
+mb = ma * 100
+
+# Set initial parameteres
+
+posa = np.array([2e11, 0])
+vela = np.array([0,2.89e4])
+posb = np.array([1.56e11,1.56e11])
+velb = np.array([-1.95e4,1.95e4])
+
+# Calculate trajectories
+
+xa, ya, xb, yb = trajectorynew(posa, vela, posb, velb, M_STAR, ma, mb, dt, 2*YEAR)
+
+# Assign a variable to the arrays of positions for each planet
+
+traja = [xa, ya]
+trajb = [xb, yb]
+trajectories = [traja, trajb]
+
+# One year is represented by 2 seconds in the animation
+
+speedup = YEAR/2
+
+# Form and show the animation
+ani = create_animation_planets(trajectories, dt, 50, speedup)
+HTML(ani.to_jshtml())
+
+# Mass of the planets 
+
+ma = 6e24 * 100
+mb = ma 
+
+# Set initial parameteres
+
+posa = np.array([2e11, 0])
+vela = np.array([0,2.89e4])
+posb = np.array([1.56e11,1.56e11])
+velb = np.array([-1.95e4,1.95e4])
+
+# Calculate trajectories
+
+xa, ya, xb, yb = trajectory_planets_interacting(posa, vela, posb, velb, M_STAR, ma, mb, dt, 2*YEAR)
+
+# Assign a variable to the arrays of positions for each planet
+
+traja = [xa, ya]
+trajb = [xb, yb]
+trajectories = [traja, trajb]
+
+# One year is represented by 2 seconds in the animation
+
+speedup = YEAR/2
+
+# Form and show the animation
+ani = create_animation_planets(trajectories, dt, 50, speedup)
+HTML(ani.to_jshtml())
+
+# Mass of the planets and star
+
+ma = 6e24
+mb = ma 
+
+# Set initial parameteres
+
+posa = np.array([2e11, 0])
+vela = np.array([0,2.89e4])
+posb = np.array([1.56e11,1.56e11])
+velb = np.array([-1.95e4,1.95e4])
+
+# Calculate trajectories
+
+xa, ya, xb, yb = trajectory_planets_interacting(posa, vela, posb, velb, M_STAR * 2, ma, mb, dt, 2*YEAR)
+
+# Assign a variable to the arrays of positions for each planet
+
+traja = [xa, ya]
+trajb = [xb, yb]
+trajectories = [traja, trajb]
+
+# One year is represented by 2 seconds in the animation
+
+speedup = YEAR/2
+
+# Form and show the animation
+ani = create_animation_planets(trajectories, dt, 50, speedup)
+HTML(ani.to_jshtml())
+
+# Mass of the planets and star
+
+ma = 6e24
+mb = ma 
+
+# Set initial parameteres
+
+posa = np.array([2e11 * 1.4, 0])
+vela = np.array([0,2.89e4])
+posb = np.array([1.56e11 * 1.4,1.56e11 * 1.4])
+velb = np.array([-1.95e4,1.95e4])
+
+# Calculate trajectories
+
+xa, ya, xb, yb = trajectory_planets_interacting(posa, vela, posb, velb, M_STAR, ma, mb, dt, 2*YEAR)
+
+# Assign a variable to the arrays of positions for each planet
+
+traja = [xa, ya]
+trajb = [xb, yb]
+trajectories = [traja, trajb]
+
+# One year is represented by 2 seconds in the animation
+
+speedup = YEAR/2
+
+# Form and show the animation
+ani = create_animation_planets(trajectories, dt, 50, speedup)
+HTML(ani.to_jshtml())
+
+# Mass of the planets and star
+
+ma = 6e24
+mb = ma 
+
+# Set initial parameteres
+
+posa = np.array([2e11 * 0.7, 0])
+vela = np.array([0,2.89e4])
+posb = np.array([1.56e11 * 0.7,1.56e11 * 0.7])
+velb = np.array([-1.95e4,1.95e4])
+
+# Calculate trajectories
+
+xa, ya, xb, yb = trajectory_planets_interacting(posa, vela, posb, velb, M_STAR, ma, mb, dt, 2*YEAR)
+
+# Assign a variable to the arrays of positions for each planet
+
+traja = [xa, ya]
+trajb = [xb, yb]
+trajectories = [traja, trajb]
+
+# One year is represented by 2 seconds in the animation
+
+speedup = YEAR/2
+
+# Form and show the animation
+ani = create_animation_planets(trajectories, dt, 50, speedup)
+HTML(ani.to_jshtml())
+
+# Mass of the planets and star
+
+ma = 6e24
+mb = ma 
+
+# Set initial parameteres
+
+posa = np.array([2e11, 0])
+vela = np.array([0,2.89e4 * 1.5])
+posb = np.array([1.56e11, 1.56e11])
+velb = np.array([-1.95e4 * 1.5, 1.95e4 * 1.5])
+
+# Calculate trajectories
+
+xa, ya, xb, yb = trajectory_planets_interacting(posa, vela, posb, velb, M_STAR, ma, mb, dt, 2*YEAR)
+
+# Assign a variable to the arrays of positions for each planet
+
+traja = [xa, ya]
+trajb = [xb, yb]
+trajectories = [traja, trajb]
+
+# One year is represented by 2 seconds in the animation
+
+speedup = YEAR/2
+
+# Form and show the animation
+ani = create_animation_planets(trajectories, dt, 50, speedup)
+HTML(ani.to_jshtml())
+
+# Mass of the planets and star
+
+ma = 6e24
+mb = ma 
+
+# Set initial parameteres
+
+posa = np.array([2e11, 0])
+vela = np.array([0,2.89e4*0.7])
+posb = np.array([1.56e11,1.56e11])
+velb = np.array([-1.95e4*0.7, 1.95e4*0.7])
+
+# Calculate trajectories
+
+xa, ya, xb, yb = trajectory_planets_interacting(posa, vela, posb, velb, M_STAR, ma, mb, dt, 2*YEAR)
+
+# Assign a variable to the arrays of positions for each planet
+
+traja = [xa, ya]
+trajb = [xb, yb]
+trajectories = [traja, trajb]
+
+# One year is represented by 2 seconds in the animation
+
+speedup = YEAR/2
+
+# Form and show the animation
+ani = create_animation_planets(trajectories, dt, 50, speedup)
+HTML(ani.to_jshtml())
+
